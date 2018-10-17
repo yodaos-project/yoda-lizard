@@ -16,6 +16,7 @@ Configuration:
 
 Dependencies:
     --mutils=DIR                specify mutils install dir
+    --mbedtls=DIR               specify mbedtls install dir
 
 Cross Compile:
     --toolchain=DIR             toolchain install dir
@@ -56,6 +57,9 @@ do
 			;;
 		--mutils=*)
 			CMAKE_ARGS=(${CMAKE_ARGS[@]} -DmutilsPrefix=$conf_optarg)
+			;;
+		--mbedtls=*)
+			CMAKE_ARGS=(${CMAKE_ARGS[@]} -DmbedtlsPrefix=$conf_optarg)
 			;;
 		--toolchain=*)
 			CMAKE_ARGS=(${CMAKE_ARGS[@]} -DTOOLCHAIN_HOME=$conf_optarg)

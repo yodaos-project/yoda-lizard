@@ -14,6 +14,13 @@ findPackage(mutils REQUIRED
   STATIC_LIBS misc
 )
 
+findPackage(mbedtls REQUIRED
+  HINTS ${mbedtlsPrefix}
+  HEADERS ssl.h
+  INC_PATH_SUFFIX include/polarssl
+  SHARED_LIBS mbedtls
+)
+
 set(CMAKE_CXX_STANDARD 11)
 if (BUILD_DEBUG)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
@@ -36,9 +43,11 @@ add_library(lizard SHARED
 target_include_directories(lizard PRIVATE
   include
 	${mutils_INCLUDE_DIRS}
+	${mbedtls_INCLUDE_DIRS}
 )
 target_link_libraries(lizard
 	${mutils_LIBRARIES}
+	${mbedtls_LIBRARIES}
 )
 
 # install include files.
@@ -67,9 +76,11 @@ add_executable(websocket demo/examples/websocket.cpp)
 target_include_directories(websocket PRIVATE
   include
   ${mutils_INCLUDE_DIRS}
+  ${mbedtls_INCLUDE_DIRS}
 )
 target_link_libraries(websocket
   ${mutils_LIBRARIES}
+  ${mbedtls_LIBRARIES}
   lizard
 )
 endif(BUILD_DEMO)
