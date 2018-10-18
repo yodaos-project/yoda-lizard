@@ -84,11 +84,6 @@ bool WSNode::on_init(rokid::Uri& uri, NodeError* err) {
       goto failed;
     if (it->second != "Upgrade")
       goto failed;
-    it = resp.headerFields.find("Sec-WebSocket-Version");
-    if (it == resp.headerFields.end())
-      goto failed;
-    if (it->second != "13")
-      goto failed;
     // TODO: check field Sec-WebSocket-Accept
   }
   return true;
