@@ -154,13 +154,16 @@ int32_t WSNode::on_read(Buffer& out, NodeError* err, void* super_extra,
     lizard_ws_frame_mask_payload((char*)(p + hsz), p + hsz + 4, header.payload_length,
         out.data + out.begin);
     out.obtain(header.payload_length);
+    read_buffer->consume(hsz + 4 + header.payload_length);
   } else {
     out.append(p + hsz, header.payload_length);
+    read_buffer->consume(hsz + header.payload_length);
   }
   return 0;
 }
 
 void WSNode::on_close() {
+  read_buffer->clear();
 }
 
 } // namespace lizard

@@ -14,6 +14,8 @@ public:
 
   const char* name() const { return "mbedtls"; }
 
+  void set_read_timeout(uint32_t tm);
+
 protected:
   bool on_init(rokid::Uri& uri, NodeError* err);
 
@@ -36,13 +38,15 @@ public:
   static const int32_t NOT_READY = -10004;
   static const int32_t INSUFF_READ_BUFFER = -10005;
   static const int32_t REMOTE_CLOSED = -10006;
+  static const int32_t SSL_READ_TIMEOUT = -10007;
 
 private:
-  static const char* error_messages[7];
+  static const char* error_messages[8];
   entropy_context entropy;
   ctr_drbg_context ctr_drbg;
   ssl_context ssl;
   int socket = -1;
+  uint32_t read_timeout = 0;
 };
 
 } // namespace lizard

@@ -9,6 +9,8 @@ class SocketNode : public Node {
 public:
   const char* name() const { return "socket"; }
 
+  void set_read_timeout(uint32_t tm);
+
 protected:
   bool on_init(rokid::Uri& uri, NodeError* err);
 
@@ -27,10 +29,12 @@ public:
   static const int32_t NOT_READY = -10000;
   static const int32_t REMOTE_CLOSED = -10001;
   static const int32_t INSUFF_BUFFER = -10002;
+  static const int32_t READ_TIMEOUT = -10003;
 
 private:
   int socket = -1;
-  static const char* error_messages[3];
+  uint32_t read_timeout = 0;
+  static const char* error_messages[4];
 };
 
 } // namespace lizard

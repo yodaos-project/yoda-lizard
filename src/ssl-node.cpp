@@ -16,6 +16,7 @@ const char* SSLNode::error_messages[] = {
   "socket not initialized",
   "read buffer size insufficient",
   "remote socket closed",
+  "ssl read timeout",
 };
 
 static void set_node_error_by_errno(NodeError* err) {
@@ -27,6 +28,28 @@ static void set_node_error_by_errno(NodeError* err) {
 
 SSLNode::~SSLNode() {
   on_close();
+}
+
+void SSLNode::set_read_timeout(uint32_t tm) {
+  read_timeout = tm;
+  if (socket >= 0) {
+    struct timeval tv;
+    tv.tv_sec = tm / 1000;
+    tv.tv_usec = (tm % 1000) * 1000;
+    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  }
+}
+
+static int my_net_recv(void* ctx, unsigned char* buf, size_t len) {
+  int fd = *(int*)ctx;
+  ssize_t ret = ::read(fd, buf, len);
+  if (ret < 0) {
+    // if socket read timeout, errno will be EAGAIN
+    if (errno == EAGAIN)
+      return POLARSSL_ERR_NET_WANT_READ;
+    return POLARSSL_ERR_NET_RECV_FAILED;
+  }
+  return ret;
 }
 
 bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
@@ -48,40 +71,6 @@ bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
   }
   ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
   ssl_set_rng(&ssl, ctr_drbg_random, &ctr_drbg);
-
-  /**
-  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0) {
-    set_node_error_by_errno(err);
-    ssl_free(&ssl);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
-    return false;
-  }
-  struct sockaddr_in addr;
-  struct hostent* hp;
-  hp = gethostbyname(uri.host.c_str());
-  if (hp == nullptr) {
-    set_node_error_by_errno(err);
-    ::close(fd);
-    ssl_free(&ssl);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
-    return false;
-  }
-  memset(&addr, 0, sizeof(addr));
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(uri.port);
-  memcpy(&addr.sin_addr, hp->h_addr_list[0], sizeof(addr.sin_addr));
-  if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
-    set_node_error_by_errno(err);
-    ::close(fd);
-    ssl_free(&ssl);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
-    return false;
-  }
-  */
   if (net_connect(&socket, uri.host.c_str(), uri.port)) {
     ssl_free(&ssl);
     ctr_drbg_free(&ctr_drbg);
@@ -91,11 +80,11 @@ bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
   }
 
   int r;
-  ssl_set_bio(&ssl, net_recv, &socket, net_send, &socket);
+  ssl_set_bio(&ssl, my_net_recv, &socket, net_send, &socket);
   do {
     r = ssl_handshake(&ssl);
-    if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
-      continue;
+    // if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
+    //   continue;
     if (r < 0) {
       set_node_error(err, SSL_HANDSHAKE_FAILED);
       net_close(socket);
@@ -107,6 +96,7 @@ bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
     }
     break;
   } while (true);
+  set_read_timeout(read_timeout);
   return true;
 }
 
@@ -148,8 +138,10 @@ int32_t SSLNode::on_read(Buffer& out, NodeError* err,
   do {
     ret = ssl_read(&ssl, (unsigned char*)out.data + out.begin, out.capacity);
 
-    if (ret == POLARSSL_ERR_NET_WANT_READ || ret == POLARSSL_ERR_NET_WANT_WRITE)
-      continue;
+    if (ret == POLARSSL_ERR_NET_WANT_READ) {
+      set_node_error(err, SSL_READ_TIMEOUT);
+      return -1;
+    }
 
     if(ret < 0) {
       set_node_error(err, SSL_READ_FAILED);

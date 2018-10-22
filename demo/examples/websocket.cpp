@@ -31,13 +31,15 @@ int main(int argc, char** argv) {
     printf("node %s init failed: %s\n", err.node->name(), err.descript);
     return 1;
   }
+
+  // echo "hello"
+  char data[32];
   buf.set_data((char*)"hello", 5, 0, 5);
   if (!cli.write(buf, &err)) {
     cli.close();
     printf("node %s write failed: %s\n", err.node->name(), err.descript);
     return 1;
   }
-  char data[32];
   buf.set_data(data, sizeof(data), 0, 0);
   if (!cli.read(buf, &err)) {
     cli.close();
@@ -46,6 +48,34 @@ int main(int argc, char** argv) {
   }
   data[buf.end] = '\0';
   printf("node read string %s\n", data);
+
+  // echo "world"
+  buf.set_data((char*)"world", 5, 0, 5);
+  if (!cli.write(buf, &err)) {
+    cli.close();
+    printf("node %s write failed: %s\n", err.node->name(), err.descript);
+    return 1;
+  }
+  buf.set_data(data, sizeof(data), 0, 0);
+  if (!cli.read(buf, &err)) {
+    cli.close();
+    printf("node %s read failed: %s\n", err.node->name(), err.descript);
+    return 1;
+  }
+  data[buf.end] = '\0';
+  printf("node read string %s\n", data);
+
+  // test timeout
+  ssl_node.set_read_timeout(1);
+  buf.clear();
+  if (!cli.read(buf, &err)) {
+    if (err.node == &ssl_node && err.code == SSLNode::SSL_READ_TIMEOUT) {
+      printf("ssl read timeout\n");
+    } else {
+      printf("%s\n", err.descript);
+    }
+  }
+
   cli.close();
   return 0;
 }

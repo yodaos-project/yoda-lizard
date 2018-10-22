@@ -14,12 +14,23 @@ const char* SocketNode::error_messages[] = {
   "socket not ready",
   "remote socket closed",
   "insufficient buffer capacity",
+  "socket read timeout",
 };
 
 static void set_node_error_by_errno(NodeError* err) {
   if (err) {
     err->code = errno;
     err->descript = strerror(errno);
+  }
+}
+
+void SocketNode::set_read_timeout(uint32_t tm) {
+  read_timeout = tm;
+  if (socket >= 0) {
+    struct timeval tv;
+    tv.tv_sec = tm / 1000;
+    tv.tv_usec = (tm % 1000) * 1000;
+    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   }
 }
 
@@ -47,6 +58,7 @@ bool SocketNode::on_init(rokid::Uri& uri, NodeError* err) {
     return false;
   }
   socket = fd;
+  set_read_timeout(read_timeout);
   return true;
 }
 
@@ -87,7 +99,11 @@ int32_t SocketNode::on_read(Buffer& out, NodeError* err,
   }
   ssize_t r = ::read(socket, out.data + out.end, out.capacity - out.end);
   if (r < 0) {
-    set_node_error_by_errno(err);
+    if (errno == EAGAIN) {
+      set_node_error(err, READ_TIMEOUT);
+    } else {
+      set_node_error_by_errno(err);
+    }
     return -1;
   }
   if (r == 0) {
