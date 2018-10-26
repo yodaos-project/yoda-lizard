@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     printf("node read failed: %s\n", err.descript);
     return 1;
   }
-  data[buf.end] = '\0';
+  data[buf.size()] = '\0';
   printf("node read string %s\n", data);
   cli.close();
   return 0;

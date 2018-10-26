@@ -8,7 +8,7 @@ namespace lizard {
 
 // ==================Buffer====================
 void Buffer::set_data(void* p, uint32_t size, uint32_t b, uint32_t e) {
-  data = (int8_t*)p;
+  datap = (int8_t*)p;
   capacity = size;
   begin = b;
   end = e;
@@ -33,7 +33,7 @@ void Buffer::shift() {
     return;
   uint32_t sz = end - begin;
   if (sz) {
-    memmove(data, data + begin, sz);
+    memmove(datap, datap + begin, sz);
   }
   begin = 0;
   end = begin + sz;
@@ -44,14 +44,18 @@ void Buffer::clear() {
 }
 
 void Buffer::move(Buffer& src) {
-  set_data(src.data, src.capacity, src.begin, src.end);
+  set_data(src.datap, src.capacity, src.begin, src.end);
   src.clear();
+}
+
+void Buffer::assign(Buffer& src) {
+  set_data(src.datap, src.capacity, src.begin, src.end);
 }
 
 bool Buffer::append(const void* data, uint32_t size) {
   if (end + size > capacity)
     return false;
-  memcpy(this->data + end, data, size);
+  memcpy(datap + end, data, size);
   end += size;
   return true;
 }
@@ -59,28 +63,28 @@ bool Buffer::append(const void* data, uint32_t size) {
 MmapBuffer::MmapBuffer(uint32_t size) {
   if (size < MIN_BUFSIZE)
     size = MIN_BUFSIZE;
-  data = (int8_t*)mmap(NULL, size, PROT_READ | PROT_WRITE,
+  datap = (int8_t*)mmap(NULL, size, PROT_READ | PROT_WRITE,
       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (data) {
+  if (datap) {
     capacity = size;
   }
 }
 
 MmapBuffer::~MmapBuffer() {
-  if (data) {
-    munmap(data, capacity);
+  if (datap) {
+    munmap(datap, capacity);
   }
 }
 
 // ==================Node====================
-bool Node::init(Uri& uri, NodeError* err) {
-  if (super_node && !super_node->init(uri, err)) {
-    if (err) {
-      err->node = this;
-    }
+bool Node::init(Uri& uri, NodeError* err, uint32_t argc, void** args) {
+  void* targ = argc ? *args : nullptr;
+  uint32_t sargc = argc ? argc - 1 : 0;
+  void** sargs = argc ? args + 1 : nullptr;
+  if (super_node && !super_node->init(uri, err, sargc, sargs)) {
     return false;
   }
-  if (!on_init(uri, err)) {
+  if (!on_init(uri, err, targ)) {
     if (err) {
       err->node = this;
     }
@@ -89,12 +93,15 @@ bool Node::init(Uri& uri, NodeError* err) {
   return true;
 }
 
-bool Node::write(Buffer& in, NodeError* err) {
+bool Node::write(Buffer& in, NodeError* err, uint32_t argc, void** args) {
   Buffer result;
   int32_t r;
+  void* targ = argc ? *args : nullptr;
+  uint32_t sargc = argc ? argc - 1 : 0;
+  void** sargs = argc ? args + 1 : nullptr;
 
   while (true) {
-    r = on_write(in, result, err);
+    r = on_write(in, result, err, targ);
     if (r < 0) {
       if (err) {
         err->node = this;
@@ -102,7 +109,7 @@ bool Node::write(Buffer& in, NodeError* err) {
       return false;
     }
     if (super_node) {
-      if (!super_node->write(result, err)) {
+      if (!super_node->write(result, err, sargc, sargs)) {
         return false;
       }
     }
@@ -113,10 +120,15 @@ bool Node::write(Buffer& in, NodeError* err) {
   return true;
 }
 
-bool Node::read(Buffer& out, NodeError* err, void** extra) {
+bool Node::read(Buffer& out, NodeError* err, uint32_t argc,
+    void** out_args) {
   int32_t r;
+  void** targ = argc ? out_args : nullptr;
+  uint32_t sargc = argc ? argc - 1 : 0;
+  void** sargs = argc ? out_args + 1 : nullptr;
+
   while (true) {
-    r = on_read(out, err, super_extra, extra);
+    r = on_read(out, err, targ);
     if (r < 0) {
       if (err) {
         err->node = this;
@@ -124,7 +136,7 @@ bool Node::read(Buffer& out, NodeError* err, void** extra) {
       }
     }
     if (r && super_node) {
-      if (read_buffer == nullptr || read_buffer->capacity == 0) {
+      if (read_buffer == nullptr || read_buffer->total_space() == 0) {
         if (err) {
           err->node = this;
           err->code = -1;
@@ -132,7 +144,7 @@ bool Node::read(Buffer& out, NodeError* err, void** extra) {
         }
         return false;
       }
-      if (!super_node->read(*read_buffer, err, &super_extra)) {
+      if (!super_node->read(*read_buffer, err, sargc, sargs)) {
         return false;
       }
     } else {

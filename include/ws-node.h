@@ -11,17 +11,23 @@ public:
 
   ~WSNode();
 
+  // 0x12 == OPCODE_BINARY | WSFRAME_FIN
+  bool send_frame(void* payload, uint32_t size, uint32_t flags = 0x12);
+
+  bool ping(void* payload = nullptr, uint32_t size = 0);
+
+  bool pong(void* payload = nullptr, uint32_t size = 0);
+
   void set_masking_key(const char* key);
 
   const char* name() const { return "websocket"; }
 
 protected:
-  bool on_init(rokid::Uri& uri, NodeError* err);
+  bool on_init(rokid::Uri& uri, NodeError* err, void* arg);
 
-  int32_t on_write(Buffer& in, Buffer& out, NodeError* err);
+  int32_t on_write(Buffer& in, Buffer& out, NodeError* err, void* arg);
 
-  int32_t on_read(Buffer& out, NodeError* err, void* super_extra,
-      void** extra);
+  int32_t on_read(Buffer& out, NodeError* err, void** out_arg);
 
   void on_close();
 

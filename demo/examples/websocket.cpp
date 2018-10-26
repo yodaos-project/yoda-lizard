@@ -1,6 +1,7 @@
 #include "sock-node.h"
 #include "ssl-node.h"
 #include "ws-node.h"
+#include "ws-frame.h"
 
 // #define SERVER_URI "ws://localhost:3000/"
 // #define SERVER_URI "ws://echo.websocket.org:80/"
@@ -46,7 +47,7 @@ int main(int argc, char** argv) {
     printf("node %s read failed: %s\n", err.node->name(), err.descript);
     return 1;
   }
-  data[buf.end] = '\0';
+  data[buf.size()] = '\0';
   printf("node read string %s\n", data);
 
   // echo "world"
@@ -62,13 +63,32 @@ int main(int argc, char** argv) {
     printf("node %s read failed: %s\n", err.node->name(), err.descript);
     return 1;
   }
-  data[buf.end] = '\0';
+  data[buf.size()] = '\0';
   printf("node read string %s\n", data);
 
-  // test timeout
-  ssl_node.set_read_timeout(1);
+  if (!cli.ping()) {
+    cli.close();
+    printf("ping failed\n");
+    return 1;
+  }
   buf.clear();
-  if (!cli.read(buf, &err)) {
+  uintptr_t wsflags;
+  if (!cli.read(buf, &err, 1, (void**)&wsflags)) {
+    cli.close();
+    printf("read pong failed\n");
+    return 1;
+  }
+  if ((wsflags & OPCODE_MASK) != OPCODE_PONG
+      || !(wsflags & WSFRAME_FIN)) {
+    printf("read pong failed: ws flags is %lu\n", wsflags);
+    cli.close();
+    return 1;
+  }
+
+  // test timeout
+  void* args[2] = { nullptr, (void*)1 };
+  buf.clear();
+  if (!cli.read(buf, &err, 2, args)) {
     if (err.node == &ssl_node && err.code == SSLNode::SSL_READ_TIMEOUT) {
       printf("ssl read timeout\n");
     } else {

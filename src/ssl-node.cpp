@@ -31,13 +31,10 @@ SSLNode::~SSLNode() {
 }
 
 void SSLNode::set_read_timeout(uint32_t tm) {
-  read_timeout = tm;
-  if (socket >= 0) {
-    struct timeval tv;
-    tv.tv_sec = tm / 1000;
-    tv.tv_usec = (tm % 1000) * 1000;
-    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-  }
+  struct timeval tv;
+  tv.tv_sec = tm / 1000;
+  tv.tv_usec = (tm % 1000) * 1000;
+  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
 
 static int my_net_recv(void* ctx, unsigned char* buf, size_t len) {
@@ -52,7 +49,7 @@ static int my_net_recv(void* ctx, unsigned char* buf, size_t len) {
   return ret;
 }
 
-bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
+bool SSLNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
   static const char* pers = "lizard_ssl_node";
 
   memset(&ssl, 0, sizeof(ssl_context));
@@ -96,7 +93,6 @@ bool SSLNode::on_init(rokid::Uri& uri, NodeError* err) {
     }
     break;
   } while (true);
-  set_read_timeout(read_timeout);
   return true;
 }
 
@@ -107,10 +103,11 @@ void SSLNode::set_node_error(NodeError* err, int32_t code) {
   }
 }
 
-int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
+int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err,
+    void* arg) {
   int r;
   while (true) {
-    r = ssl_write(&ssl, (unsigned char*)in.data + in.begin, in.size());
+    r = ssl_write(&ssl, (unsigned char*)in.data_begin(), in.size());
     if (r >= 0) {
       in.consume(r);
       if (in.empty())
@@ -123,20 +120,22 @@ int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
   return 0;
 }
 
-int32_t SSLNode::on_read(Buffer& out, NodeError* err,
-    void* super_extra, void** extra) {
+int32_t SSLNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
   if (socket < 0) {
     set_node_error(err, NOT_READY);
     return -1;
   }
-  if (out.capacity == out.end) {
+  if (out.remain_space() == 0) {
     set_node_error(err, INSUFF_READ_BUFFER);
     return -1;
+  }
+  if (out_arg) {
+    set_read_timeout((uint32_t)(uintptr_t)(*out_arg));
   }
 
   int ret;
   do {
-    ret = ssl_read(&ssl, (unsigned char*)out.data + out.begin, out.capacity);
+    ret = ssl_read(&ssl, (unsigned char*)out.data_end(), out.remain_space());
 
     if (ret == POLARSSL_ERR_NET_WANT_READ) {
       set_node_error(err, SSL_READ_TIMEOUT);

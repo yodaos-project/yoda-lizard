@@ -1,3 +1,4 @@
+#include <strings.h>
 #include "ws-node.h"
 #include "ws-frame.h"
 #include "http.h"
@@ -22,6 +23,21 @@ WSNode::~WSNode() {
   delete read_buffer;
 }
 
+bool WSNode::send_frame(void* payload, uint32_t size, uint32_t flags) {
+  Buffer in;
+  uintptr_t arg = flags;
+  in.set_data(payload, size, 0, size);
+  return Node::write(in, nullptr, 1, (void**)&arg);
+}
+
+bool WSNode::ping(void* payload, uint32_t size) {
+  return send_frame(payload, size, OPCODE_PING | WSFRAME_FIN);
+}
+
+bool WSNode::pong(void* payload, uint32_t size) {
+  return send_frame(payload, size, OPCODE_PONG | WSFRAME_FIN);
+}
+
 void WSNode::set_masking_key(const char* key) {
   memcpy(masking_key, key, 4);
 }
@@ -33,7 +49,7 @@ void WSNode::set_node_error(NodeError* err, int32_t code) {
   }
 }
 
-bool WSNode::on_init(rokid::Uri& uri, NodeError* err) {
+bool WSNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
   HttpRequest req;
   char buf[256];
   int32_t len;
@@ -63,7 +79,7 @@ bool WSNode::on_init(rokid::Uri& uri, NodeError* err) {
       if (!super_node->read(rwbuf, err)) {
         return false;
       }
-      pr = resp.parse((char*)rwbuf.data, rwbuf.end);
+      pr = resp.parse((char*)rwbuf.data_begin(), rwbuf.size());
       if (pr == HttpResponse::NOT_FINISH) {
         continue;
       }
@@ -77,12 +93,12 @@ bool WSNode::on_init(rokid::Uri& uri, NodeError* err) {
     it = resp.headerFields.find("Upgrade");
     if (it == resp.headerFields.end())
       goto failed;
-    if (it->second != "websocket")
+    if (strcasecmp(it->second.c_str(), "websocket"))
       goto failed;
     it = resp.headerFields.find("Connection");
     if (it == resp.headerFields.end())
       goto failed;
-    if (it->second != "Upgrade")
+    if (strcasecmp(it->second.c_str(), "upgrade"))
       goto failed;
     // TODO: check field Sec-WebSocket-Accept
   }
@@ -93,24 +109,31 @@ failed:
   return false;
 }
 
-int32_t WSNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
+int32_t WSNode::on_write(Buffer& in, Buffer& out, NodeError* err,
+    void* arg) {
+  uint32_t flags = (uintptr_t)arg;
   if (write_state == 0) {
     uint8_t mask = *(int32_t*)masking_key ? 1 : 0;
-    int32_t c = lizard_ws_frame_create(OPCODE_BINARY, 1, mask, masking_key,
-        in.end - in.begin, frame_header, sizeof(frame_header));
+    int32_t c = lizard_ws_frame_create(flags & OPCODE_MASK,
+        flags & FIN_MASK ? 1 : 0, mask, masking_key,
+        in.size(), frame_header, sizeof(frame_header));
     out.set_data(frame_header, sizeof(frame_header), 0, c);
     write_state = 1;
     return 1;
   }
   if (*(int32_t*)masking_key) {
     uint32_t wsize;
-    if ((in.end - in.begin) > write_buffer.capacity) {
-      wsize = write_buffer.capacity;
-    } else {
-      wsize = in.end - in.begin;
+    if (is_control_opcode(flags & OPCODE_MASK) && in.size() > 125) {
+      set_node_error(err, INVALID_CONTROL_FRAME_FORMAT);
+      return -1;
     }
-    lizard_ws_frame_mask_payload(masking_key, in.data + in.begin,
-        wsize, write_buffer.data);
+    if (in.size() > write_buffer.total_space()) {
+      wsize = write_buffer.total_space();
+    } else {
+      wsize = in.size();
+    }
+    lizard_ws_frame_mask_payload(masking_key, in.data_begin(),
+        wsize, write_buffer.data_begin());
     in.consume(wsize);
     write_buffer.obtain(wsize);
     out.move(write_buffer);
@@ -125,10 +148,9 @@ int32_t WSNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
   return 0;
 }
 
-int32_t WSNode::on_read(Buffer& out, NodeError* err, void* super_extra,
-    void** extra) {
+int32_t WSNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
   uint32_t read_bytes = read_buffer->size();
-  uint8_t* p = (uint8_t*)read_buffer->data;
+  uint8_t* p = (uint8_t*)read_buffer->data_begin();
   WSFrameHeader header;
   int32_t hsz = lizard_ws_frame_parse_header(p, read_bytes, &header);
   if (hsz == -1) {
@@ -146,18 +168,24 @@ int32_t WSNode::on_read(Buffer& out, NodeError* err, void* super_extra,
   if (frame_size > read_bytes)
     return 1;
   out.shift();
-  if (out.capacity - out.end < header.payload_length) {
+  if (out.remain_space() < header.payload_length) {
     set_node_error(err, INSUFF_READ_BUFFER);
     return -1;
   }
   if (header.mask) {
     lizard_ws_frame_mask_payload((char*)(p + hsz), p + hsz + 4, header.payload_length,
-        out.data + out.begin);
+        out.data_begin());
     out.obtain(header.payload_length);
     read_buffer->consume(hsz + 4 + header.payload_length);
   } else {
     out.append(p + hsz, header.payload_length);
     read_buffer->consume(hsz + header.payload_length);
+  }
+  if (out_arg) {
+    intptr_t v = header.opcode;
+    if (header.fin)
+      v |= WSFRAME_FIN;
+    *out_arg = (void*)v;
   }
   return 0;
 }

@@ -9,20 +9,19 @@ class SocketNode : public Node {
 public:
   const char* name() const { return "socket"; }
 
-  void set_read_timeout(uint32_t tm);
-
 protected:
-  bool on_init(rokid::Uri& uri, NodeError* err);
+  bool on_init(rokid::Uri& uri, NodeError* err, void* arg);
 
-  int32_t on_write(Buffer& in, Buffer& out, NodeError* err);
+  int32_t on_write(Buffer& in, Buffer& out, NodeError* err, void* arg);
 
-  int32_t on_read(Buffer& out, NodeError* err, void* super_extra,
-      void** extra);
+  int32_t on_read(Buffer& out, NodeError* err, void** out_arg);
 
   void on_close();
 
 private:
   void set_node_error(NodeError* err, int32_t code);
+
+  void set_read_timeout(uint32_t tm);
 
 public:
   static const int32_t ERROR_CODE_BEGIN = -10000;
@@ -33,7 +32,6 @@ public:
 
 private:
   int socket = -1;
-  uint32_t read_timeout = 0;
   static const char* error_messages[4];
 };
 

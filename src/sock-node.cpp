@@ -25,16 +25,13 @@ static void set_node_error_by_errno(NodeError* err) {
 }
 
 void SocketNode::set_read_timeout(uint32_t tm) {
-  read_timeout = tm;
-  if (socket >= 0) {
-    struct timeval tv;
-    tv.tv_sec = tm / 1000;
-    tv.tv_usec = (tm % 1000) * 1000;
-    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-  }
+  struct timeval tv;
+  tv.tv_sec = tm / 1000;
+  tv.tv_usec = (tm % 1000) * 1000;
+  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
 
-bool SocketNode::on_init(rokid::Uri& uri, NodeError* err) {
+bool SocketNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
     set_node_error_by_errno(err);
@@ -58,7 +55,6 @@ bool SocketNode::on_init(rokid::Uri& uri, NodeError* err) {
     return false;
   }
   socket = fd;
-  set_read_timeout(read_timeout);
   return true;
 }
 
@@ -69,12 +65,13 @@ void SocketNode::set_node_error(NodeError* err, int32_t code) {
   }
 }
 
-int32_t SocketNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
+int32_t SocketNode::on_write(Buffer& in, Buffer& out, NodeError* err,
+    void* arg) {
   if (socket < 0) {
     set_node_error(err, NOT_READY);
     return -1;
   }
-  ssize_t r = ::write(socket, in.data + in.begin, in.end - in.begin);
+  ssize_t r = ::write(socket, in.data_begin(), in.size());
   if (r < 0) {
     set_node_error_by_errno(err);
     return -1;
@@ -87,17 +84,19 @@ int32_t SocketNode::on_write(Buffer& in, Buffer& out, NodeError* err) {
   return 0;
 }
 
-int32_t SocketNode::on_read(Buffer& out, NodeError* err,
-    void* super_extra, void** extra) {
+int32_t SocketNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
   if (socket < 0) {
     set_node_error(err, NOT_READY);
     return -1;
   }
-  if (out.capacity == out.end) {
+  if (out.remain_space() == 0) {
     set_node_error(err, INSUFF_BUFFER);
     return -1;
   }
-  ssize_t r = ::read(socket, out.data + out.end, out.capacity - out.end);
+  if (out_arg) {
+    set_read_timeout((uint32_t)(uintptr_t)(*out_arg));
+  }
+  ssize_t r = ::read(socket, out.data_end(), out.remain_space());
   if (r < 0) {
     if (errno == EAGAIN) {
       set_node_error(err, READ_TIMEOUT);
@@ -110,7 +109,7 @@ int32_t SocketNode::on_read(Buffer& out, NodeError* err,
     set_node_error(err, REMOTE_CLOSED);
     return -1;
   }
-  out.end += r;
+  out.obtain(r);
   return 0;
 }
 
