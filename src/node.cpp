@@ -1,7 +1,15 @@
 #include <sys/mman.h>
+#include <chrono>
 #include "node.h"
+#ifdef __APPLE__
+#include <sys/socket.h>
+#else
+#include <signal.h>
+#endif
 
 #define MIN_BUFSIZE 4096
+
+using namespace std;
 
 namespace rokid {
 namespace lizard {
@@ -99,6 +107,7 @@ bool Node::write(Buffer& in, NodeError* err, uint32_t argc, void** args) {
   void* targ = argc ? *args : nullptr;
   uint32_t sargc = argc ? argc - 1 : 0;
   void** sargs = argc ? args + 1 : nullptr;
+  lock_guard<mutex> locker(write_mutex);
 
   while (true) {
     r = on_write(in, result, err, targ);
@@ -155,6 +164,7 @@ bool Node::read(Buffer& out, NodeError* err, uint32_t argc,
 }
 
 void Node::close() {
+  lock_guard<mutex> locker(write_mutex);
   on_close();
   if (super_node) {
     super_node->close();
@@ -163,6 +173,25 @@ void Node::close() {
 
 void Node::chain(Node* node) {
   super_node = node;
+}
+
+void ignore_sigpipe(int socket) {
+#ifdef __APPLE__
+  int option_value = 1; /* Set NOSIGPIPE to ON */
+  setsockopt(socket, SOL_SOCKET, SO_NOSIGPIPE, &option_value,
+        sizeof(option_value));
+#else
+  static bool ignored_sigpipe = false;
+  if (!ignored_sigpipe) {
+    struct sigaction act;
+    int r;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = SIG_IGN;
+    r = sigaction(SIGPIPE, &act, nullptr);
+    if (r == 0)
+      ignored_sigpipe = true;
+  }
+#endif // __APPLE__
 }
 
 } // namespace lizard

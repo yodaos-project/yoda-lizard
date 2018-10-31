@@ -7,6 +7,8 @@ namespace lizard {
 
 class SocketNode : public Node {
 public:
+  ~SocketNode();
+
   const char* name() const { return "socket"; }
 
 protected:
@@ -20,8 +22,6 @@ protected:
 
 private:
   void set_node_error(NodeError* err, int32_t code);
-
-  void set_read_timeout(uint32_t tm);
 
 public:
   static const int32_t ERROR_CODE_BEGIN = -10000;

@@ -10,6 +10,8 @@
 namespace rokid {
 namespace lizard {
 
+extern void ignore_sigpipe(int socket);
+
 const char* SocketNode::error_messages[] = {
   "socket not ready",
   "remote socket closed",
@@ -24,11 +26,15 @@ static void set_node_error_by_errno(NodeError* err) {
   }
 }
 
-void SocketNode::set_read_timeout(uint32_t tm) {
+static void set_read_timeout(int socket, uint32_t tm) {
   struct timeval tv;
   tv.tv_sec = tm / 1000;
   tv.tv_usec = (tm % 1000) * 1000;
   setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+SocketNode::~SocketNode() {
+  on_close();
 }
 
 bool SocketNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
@@ -54,6 +60,7 @@ bool SocketNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
     ::close(fd);
     return false;
   }
+  ignore_sigpipe(fd);
   socket = fd;
   return true;
 }
@@ -94,7 +101,7 @@ int32_t SocketNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
     return -1;
   }
   if (out_arg) {
-    set_read_timeout((uint32_t)(uintptr_t)(*out_arg));
+    set_read_timeout(socket, (uint32_t)(uintptr_t)(*out_arg));
   }
   ssize_t r = ::read(socket, out.data_end(), out.remain_space());
   if (r < 0) {

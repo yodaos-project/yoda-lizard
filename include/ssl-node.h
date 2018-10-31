@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include "node.h"
 #include "ssl.h"
 #include "entropy.h"
@@ -25,8 +26,6 @@ protected:
 
 private:
   void set_node_error(NodeError* err, int32_t code);
-
-  void set_read_timeout(uint32_t tm);
 
 public:
   static const int32_t ERROR_CODE_BEGIN = -10000;

@@ -8,6 +8,8 @@
 namespace rokid {
 namespace lizard {
 
+extern void ignore_sigpipe(int socket);
+
 const char* SSLNode::error_messages[] = {
   "ssl initialize failed",
   "ssl handshake failed",
@@ -30,7 +32,7 @@ SSLNode::~SSLNode() {
   on_close();
 }
 
-void SSLNode::set_read_timeout(uint32_t tm) {
+static void set_read_timeout(int socket, uint32_t tm) {
   struct timeval tv;
   tv.tv_sec = tm / 1000;
   tv.tv_usec = (tm % 1000) * 1000;
@@ -93,6 +95,7 @@ bool SSLNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
     }
     break;
   } while (true);
+  ignore_sigpipe(socket);
   return true;
 }
 
@@ -107,6 +110,7 @@ int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err,
     void* arg) {
   int r;
   while (true) {
+    printf("ssl-node on_write %u bytes\n", in.size());
     r = ssl_write(&ssl, (unsigned char*)in.data_begin(), in.size());
     if (r >= 0) {
       in.consume(r);
@@ -130,7 +134,7 @@ int32_t SSLNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
     return -1;
   }
   if (out_arg) {
-    set_read_timeout((uint32_t)(uintptr_t)(*out_arg));
+    set_read_timeout(socket, (uint32_t)(uintptr_t)(*out_arg));
   }
 
   int ret;

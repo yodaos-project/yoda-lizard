@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include "uri.h"
 
 namespace rokid {
@@ -96,6 +97,9 @@ protected:
 protected:
   Node* super_node = nullptr;
   Buffer* read_buffer = nullptr;
+
+private:
+  std::mutex write_mutex;
 };
 
 } // namespace lizard
