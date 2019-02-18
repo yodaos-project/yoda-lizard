@@ -37,7 +37,7 @@ SocketNode::~SocketNode() {
   on_close();
 }
 
-bool SocketNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
+bool SocketNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
     set_node_error_by_errno(err);

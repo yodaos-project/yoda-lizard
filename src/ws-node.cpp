@@ -49,7 +49,7 @@ void WSNode::set_node_error(NodeError* err, int32_t code) {
   }
 }
 
-bool WSNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
+bool WSNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
   HttpRequest req;
   char buf[256];
   int32_t len;

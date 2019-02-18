@@ -2,9 +2,6 @@
 
 #include <mutex>
 #include "node.h"
-#include "ssl.h"
-#include "entropy.h"
-#include "ctr_drbg.h"
 
 namespace rokid {
 namespace lizard {
@@ -16,7 +13,7 @@ public:
   const char* name() const { return "mbedtls"; }
 
 protected:
-  bool on_init(rokid::Uri& uri, NodeError* err, void* arg);
+  bool on_init(const rokid::Uri& uri, NodeError* err, void* arg);
 
   int32_t on_write(Buffer& in, Buffer& out, NodeError* err, void* arg);
 
@@ -40,9 +37,7 @@ public:
 
 private:
   static const char* error_messages[8];
-  entropy_context entropy;
-  ctr_drbg_context ctr_drbg;
-  ssl_context ssl;
+  void *ssl_data;
   int socket = -1;
 };
 

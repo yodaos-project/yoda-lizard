@@ -66,7 +66,7 @@ class Node {
 public:
   virtual ~Node() = default;
 
-  bool init(rokid::Uri& uri, NodeError* err = nullptr, uint32_t argc = 0,
+  bool init(const rokid::Uri& uri, NodeError* err = nullptr, uint32_t argc = 0,
       void** args = nullptr);
 
   bool write(Buffer& in, NodeError* err = nullptr, uint32_t argc = 0,
@@ -82,7 +82,7 @@ public:
   virtual const char* name() const = 0;
 
 protected:
-  virtual bool on_init(rokid::Uri& uri, NodeError* err, void* arg) = 0;
+  virtual bool on_init(const rokid::Uri& uri, NodeError* err, void* arg) = 0;
 
   virtual int32_t on_write(Buffer& in, Buffer& out, NodeError* err,
       void* arg) = 0;

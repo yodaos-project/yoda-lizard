@@ -3,6 +3,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "ssl.h"
+#include "entropy.h"
+#include "ctr_drbg.h"
 #include "ssl-node.h"
 
 namespace rokid {
@@ -51,51 +54,73 @@ static int my_net_recv(void* ctx, unsigned char* buf, size_t len) {
   return ret;
 }
 
-bool SSLNode::on_init(rokid::Uri& uri, NodeError* err, void* arg) {
-  static const char* pers = "lizard_ssl_node";
+class mbedtlsData {
+public:
+  entropy_context entropy;
+  ctr_drbg_context ctr_drbg;
+  ssl_context ssl;
+  bool initialized = false;
 
-  memset(&ssl, 0, sizeof(ssl_context));
-  entropy_init(&entropy);
-  if(ctr_drbg_init(&ctr_drbg, entropy_func, &entropy,
-        (const unsigned char *) pers, strlen(pers)) != 0) {
+  ~mbedtlsData() {
+    if (initialized) {
+      ssl_free(&ssl);
+      ctr_drbg_free(&ctr_drbg);
+      entropy_free(&entropy);
+    }
+  }
+
+  bool init() {
+    static const char* pers = "lizard_ssl_node";
+
+    memset(&ssl, 0, sizeof(ssl_context));
+    entropy_init(&entropy);
+    if(ctr_drbg_init(&ctr_drbg, entropy_func, &entropy,
+          (const unsigned char *) pers, strlen(pers)) != 0) {
+      entropy_free(&entropy);
+      return false;
+    }
+    if(ssl_init(&ssl) != 0) {
+      ctr_drbg_free(&ctr_drbg);
+      entropy_free(&entropy);
+      return false;
+    }
+    ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
+    ssl_set_rng(&ssl, ctr_drbg_random, &ctr_drbg);
+    initialized = true;
+    return true;
+  }
+};
+
+bool SSLNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
+  mbedtlsData *mbedtls_data = new mbedtlsData();
+  if (!mbedtls_data->init()) {
+    delete mbedtls_data;
     set_node_error(err, SSL_INIT_FAILED);
-    entropy_free(&entropy);
     return false;
   }
-  if(ssl_init(&ssl) != 0) {
-    set_node_error(err, SSL_INIT_FAILED);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
-    return false;
-  }
-  ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
-  ssl_set_rng(&ssl, ctr_drbg_random, &ctr_drbg);
   if (net_connect(&socket, uri.host.c_str(), uri.port)) {
-    ssl_free(&ssl);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
+    delete mbedtls_data;
     set_node_error(err, SSL_INIT_FAILED);
     return false;
   }
 
   int r;
-  ssl_set_bio(&ssl, my_net_recv, &socket, net_send, &socket);
+  ssl_set_bio(&mbedtls_data->ssl, my_net_recv, &socket, net_send, &socket);
   do {
-    r = ssl_handshake(&ssl);
+    r = ssl_handshake(&mbedtls_data->ssl);
     // if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
     //   continue;
     if (r < 0) {
       set_node_error(err, SSL_HANDSHAKE_FAILED);
       net_close(socket);
       socket = -1;
-      ssl_free(&ssl);
-      ctr_drbg_free(&ctr_drbg);
-      entropy_free(&entropy);
+      delete mbedtls_data;
       return false;
     }
     break;
   } while (true);
   ignore_sigpipe(socket);
+  ssl_data = mbedtls_data;
   return true;
 }
 
@@ -110,8 +135,7 @@ int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err,
     void* arg) {
   int r;
   while (true) {
-    printf("ssl-node on_write %u bytes\n", in.size());
-    r = ssl_write(&ssl, (unsigned char*)in.data_begin(), in.size());
+    r = ssl_write(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)in.data_begin(), in.size());
     if (r >= 0) {
       in.consume(r);
       if (in.empty())
@@ -139,7 +163,7 @@ int32_t SSLNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
 
   int ret;
   do {
-    ret = ssl_read(&ssl, (unsigned char*)out.data_end(), out.remain_space());
+    ret = ssl_read(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)out.data_end(), out.remain_space());
 
     if (ret == POLARSSL_ERR_NET_WANT_READ) {
       set_node_error(err, SSL_READ_TIMEOUT);
@@ -166,9 +190,7 @@ int32_t SSLNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
 void SSLNode::on_close() {
   if (socket >= 0) {
     net_close(socket);
-    ssl_free(&ssl);
-    ctr_drbg_free(&ctr_drbg);
-    entropy_free(&entropy);
+    delete reinterpret_cast<mbedtlsData*>(ssl_data);
     socket = -1;
   }
 }

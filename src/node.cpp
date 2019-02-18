@@ -85,7 +85,7 @@ MmapBuffer::~MmapBuffer() {
 }
 
 // ==================Node====================
-bool Node::init(Uri& uri, NodeError* err, uint32_t argc, void** args) {
+bool Node::init(const Uri& uri, NodeError* err, uint32_t argc, void** args) {
   void* targ = argc ? *args : nullptr;
   uint32_t sargc = argc ? argc - 1 : 0;
   void** sargs = argc ? args + 1 : nullptr;

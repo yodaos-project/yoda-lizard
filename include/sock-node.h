@@ -12,7 +12,7 @@ public:
   const char* name() const { return "socket"; }
 
 protected:
-  bool on_init(rokid::Uri& uri, NodeError* err, void* arg);
+  bool on_init(const rokid::Uri& uri, NodeError* err, void* arg);
 
   int32_t on_write(Buffer& in, Buffer& out, NodeError* err, void* arg);
 
