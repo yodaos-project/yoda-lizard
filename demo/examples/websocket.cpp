@@ -15,8 +15,9 @@ int main(int argc, char** argv) {
   SSLNode ssl_node;
   WSNode cli;
   Uri uri;
-  NodeError err;
-  Buffer buf;
+  const NodeError *err;
+  char data[128];
+  Buffer rbuf(data, 48), wbuf(data + 48, 48), buf(data + 96, 32);
 
   char mask[4] = { 'a', 'b', 'c', 'd' };
   cli.set_masking_key(mask);
@@ -28,71 +29,82 @@ int main(int argc, char** argv) {
     cli.chain(&ssl_node);
   else
     cli.chain(&sock_node);
-  if (!cli.init(uri, &err)) {
-    printf("node %s init failed: %s\n", err.node->name(), err.descript);
+  NodeArgs<Buffer> bufs;
+  bufs.push(&rbuf);
+  cli.set_read_buffers(&bufs);
+  bufs.clear();
+  bufs.push(&wbuf);
+  cli.set_write_buffers(&bufs);
+  if (!cli.init(uri)) {
+    err = cli.get_error();
+    printf("node %s init failed: %s\n", err->node->name(), err->desc.c_str());
     return 1;
   }
 
+  uint32_t wsflags;
+  NodeArgs<void> args;
   // echo "hello"
-  char data[32];
-  buf.set_data((char*)"hello", 5, 0, 5);
-  if (!cli.write(buf, &err)) {
+  if (!cli.send_frame("hello", 5)) {
     cli.close();
-    printf("node %s write failed: %s\n", err.node->name(), err.descript);
+    err = cli.get_error();
+    printf("node %s write failed: %s\n", err->node->name(), err->desc.c_str());
     return 1;
   }
-  buf.set_data(data, sizeof(data), 0, 0);
-  if (!cli.read(buf, &err)) {
+  if (!cli.read(&buf)) {
     cli.close();
-    printf("node %s read failed: %s\n", err.node->name(), err.descript);
+    err = cli.get_error();
+    printf("node %s read failed: %s\n", err->node->name(), err->desc.c_str());
     return 1;
   }
-  data[buf.size()] = '\0';
-  printf("node read string %s\n", data);
+  reinterpret_cast<char *>(buf.data_end())[0] = '\0';
+  printf("node read string %s\n", buf.data_begin());
+  buf.clear();
 
   // echo "world"
-  buf.set_data((char*)"world", 5, 0, 5);
-  if (!cli.write(buf, &err)) {
+  if (!cli.send_frame("world", 5)) {
     cli.close();
-    printf("node %s write failed: %s\n", err.node->name(), err.descript);
+    err = cli.get_error();
+    printf("node %s write failed: %s\n", err->node->name(), err->desc.c_str());
     return 1;
   }
-  buf.set_data(data, sizeof(data), 0, 0);
-  if (!cli.read(buf, &err)) {
+  if (!cli.read(&buf)) {
     cli.close();
-    printf("node %s read failed: %s\n", err.node->name(), err.descript);
+    err = cli.get_error();
+    printf("node %s read failed: %s\n", err->node->name(), err->desc.c_str());
     return 1;
   }
-  data[buf.size()] = '\0';
-  printf("node read string %s\n", data);
+  reinterpret_cast<char *>(buf.data_end())[0] = '\0';
+  printf("node read string %s\n", buf.data_begin());
+  buf.clear();
 
   if (!cli.ping()) {
     cli.close();
     printf("ping failed\n");
     return 1;
   }
-  buf.clear();
-  uintptr_t wsflags;
-  if (!cli.read(buf, &err, 1, (void**)&wsflags)) {
+  args.push(&wsflags);
+  if (!cli.read(&buf, &args)) {
     cli.close();
     printf("read pong failed\n");
     return 1;
   }
   if ((wsflags & OPCODE_MASK) != OPCODE_PONG
       || !(wsflags & WSFRAME_FIN)) {
-    printf("read pong failed: ws flags is %lu\n", wsflags);
+    printf("read pong failed: ws flags is %u\n", wsflags);
     cli.close();
     return 1;
   }
 
   // test timeout
-  void* args[2] = { nullptr, (void*)1 };
-  buf.clear();
-  if (!cli.read(buf, &err, 2, args)) {
-    if (err.node == &ssl_node && err.code == SSLNode::SSL_READ_TIMEOUT) {
+  uint32_t timeout = 1;
+  args.push(nullptr);
+  args.push(&timeout);
+  if (!cli.read(&buf, &args)) {
+    err = cli.get_error();
+    if (err->node == &ssl_node && err->code == SSLNode::SSL_READ_TIMEOUT) {
       printf("ssl read timeout\n");
     } else {
-      printf("%s\n", err.descript);
+      printf("%s\n", err->desc.c_str());
     }
   }
 

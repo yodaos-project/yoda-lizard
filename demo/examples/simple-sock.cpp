@@ -8,28 +8,27 @@ using namespace rokid::lizard;
 int main(int argc, char** argv) {
   SocketNode cli;
   Uri uri;
-  NodeError err;
   Buffer buf;
 
   if (!uri.parse(SERVER_URI)) {
     printf("parse server uri failed\n");
     return 1;
   }
-  if (!cli.init(uri, &err)) {
-    printf("node init failed: %s\n", err.descript);
+  if (!cli.init(uri)) {
+    printf("node init failed: %s\n", cli.get_error()->desc.c_str());
     return 1;
   }
   buf.set_data((char*)"hello", 5, 0, 5);
-  if (!cli.write(buf, &err)) {
+  if (!cli.write(&buf)) {
     cli.close();
-    printf("node write failed: %s\n", err.descript);
+    printf("node write failed: %s\n", cli.get_error()->desc.c_str());
     return 1;
   }
   char data[32];
   buf.set_data(data, sizeof(data), 0, 0);
-  if (!cli.read(buf, &err)) {
+  if (!cli.read(&buf)) {
     cli.close();
-    printf("node read failed: %s\n", err.descript);
+    printf("node read failed: %s\n", cli.get_error()->desc.c_str());
     return 1;
   }
   data[buf.size()] = '\0';

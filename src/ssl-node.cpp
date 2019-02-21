@@ -7,6 +7,7 @@
 #include "entropy.h"
 #include "ctr_drbg.h"
 #include "ssl-node.h"
+#include "common.h"
 
 namespace rokid {
 namespace lizard {
@@ -23,13 +24,6 @@ const char* SSLNode::error_messages[] = {
   "remote socket closed",
   "ssl read timeout",
 };
-
-static void set_node_error_by_errno(NodeError* err) {
-  if (err) {
-    err->code = errno;
-    err->descript = strerror(errno);
-  }
-}
 
 SSLNode::~SSLNode() {
   on_close();
@@ -91,16 +85,16 @@ public:
   }
 };
 
-bool SSLNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
+bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
   mbedtlsData *mbedtls_data = new mbedtlsData();
   if (!mbedtls_data->init()) {
     delete mbedtls_data;
-    set_node_error(err, SSL_INIT_FAILED);
+    set_node_error(SSL_INIT_FAILED);
     return false;
   }
   if (net_connect(&socket, uri.host.c_str(), uri.port)) {
     delete mbedtls_data;
-    set_node_error(err, SSL_INIT_FAILED);
+    set_node_error(SSL_INIT_FAILED);
     return false;
   }
 
@@ -111,7 +105,7 @@ bool SSLNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
     // if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
     //   continue;
     if (r < 0) {
-      set_node_error(err, SSL_HANDSHAKE_FAILED);
+      set_node_error(SSL_HANDSHAKE_FAILED);
       net_close(socket);
       socket = -1;
       delete mbedtls_data;
@@ -124,63 +118,75 @@ bool SSLNode::on_init(const rokid::Uri& uri, NodeError* err, void* arg) {
   return true;
 }
 
-void SSLNode::set_node_error(NodeError* err, int32_t code) {
-  if (err) {
-    err->code = code;
-    err->descript = error_messages[ERROR_CODE_BEGIN - code];
-  }
+void SSLNode::set_node_error(int32_t code) {
+  err_info.node = this;
+  err_info.code = code;
+  err_info.desc = error_messages[ERROR_CODE_BEGIN - code];
 }
 
-int32_t SSLNode::on_write(Buffer& in, Buffer& out, NodeError* err,
-    void* arg) {
+int32_t SSLNode::on_write(Buffer *in, Buffer *out, void* arg) {
   int r;
+  if (in == nullptr || in->empty())
+    return 0;
+#ifdef LIZARD_DEBUG
+  uint32_t sz = in->size();
+  uint8_t *db = reinterpret_cast<uint8_t *>(in->data_begin());
+#endif
   while (true) {
-    r = ssl_write(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)in.data_begin(), in.size());
+    r = ssl_write(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)in->data_begin(), in->size());
     if (r >= 0) {
-      in.consume(r);
-      if (in.empty())
+      in->consume(r);
+      if (in->empty())
         break;
     } else if (r != POLARSSL_ERR_NET_WANT_READ && r != POLARSSL_ERR_NET_WANT_WRITE) {
-      set_node_error(err, SSL_WRITE_FAILED);
+      set_node_error(SSL_WRITE_FAILED);
       return -1;
     }
   }
+#ifdef LIZARD_DEBUG
+  printf("ssl-node: write %u bytes: ", sz);
+  print_hex_data(db, sz);
+#endif
   return 0;
 }
 
-int32_t SSLNode::on_read(Buffer& out, NodeError* err, void** out_arg) {
+int32_t SSLNode::on_read(Buffer *out, Buffer *in, void* arg) {
   if (socket < 0) {
-    set_node_error(err, NOT_READY);
+    set_node_error(NOT_READY);
     return -1;
   }
-  if (out.remain_space() == 0) {
-    set_node_error(err, INSUFF_READ_BUFFER);
+  if (out == nullptr || out->remain_space() == 0) {
+    set_node_error(INSUFF_READ_BUFFER);
     return -1;
   }
-  if (out_arg) {
-    set_read_timeout(socket, (uint32_t)(uintptr_t)(*out_arg));
+  if (arg) {
+    set_read_timeout(socket, reinterpret_cast<uint32_t *>(arg)[0]);
   }
 
   int ret;
   do {
-    ret = ssl_read(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)out.data_end(), out.remain_space());
+    ret = ssl_read(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)out->data_end(), out->remain_space());
 
     if (ret == POLARSSL_ERR_NET_WANT_READ) {
-      set_node_error(err, SSL_READ_TIMEOUT);
+      set_node_error(SSL_READ_TIMEOUT);
       return -1;
     }
 
     if(ret < 0) {
-      set_node_error(err, SSL_READ_FAILED);
+      set_node_error(SSL_READ_FAILED);
       return -1;
     }
 
     if(ret == 0) {
-      set_node_error(err, REMOTE_CLOSED);
+      set_node_error(REMOTE_CLOSED);
       return -1;
     }
 
-    out.obtain(ret);
+    out->obtain(ret);
+#ifdef LIZARD_DEBUG
+    printf("ssl-node: read %d bytes: ", ret);
+    print_hex_data(reinterpret_cast<uint8_t *>(out->data_begin()), out->size());
+#endif
     break;
   } while(true);
 

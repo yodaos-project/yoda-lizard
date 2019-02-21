@@ -13,16 +13,16 @@ public:
   const char* name() const { return "mbedtls"; }
 
 protected:
-  bool on_init(const rokid::Uri& uri, NodeError* err, void* arg);
+  bool on_init(const rokid::Uri& uri, void* arg);
 
-  int32_t on_write(Buffer& in, Buffer& out, NodeError* err, void* arg);
+  int32_t on_write(Buffer *in, Buffer *out, void *arg);
 
-  int32_t on_read(Buffer& out, NodeError* err, void** out_arg);
+  int32_t on_read(Buffer *out, Buffer *in, void *arg);
 
   void on_close();
 
 private:
-  void set_node_error(NodeError* err, int32_t code);
+  void set_node_error(int32_t code);
 
 public:
   static const int32_t ERROR_CODE_BEGIN = -10000;

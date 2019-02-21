@@ -1,6 +1,7 @@
 #pragma once
 
-#include <mutex>
+#include <list>
+#include <string>
 #include "uri.h"
 
 namespace rokid {
@@ -10,7 +11,7 @@ class Node;
 typedef struct {
   Node* node;
   int32_t code;
-  const char* descript;
+  std::string desc;
 } NodeError;
 
 class Buffer {
@@ -55,51 +56,103 @@ protected:
   uint32_t capacity = 0;
 };
 
+/**
 class MmapBuffer : public Buffer {
 public:
   MmapBuffer(uint32_t size);
 
   ~MmapBuffer();
 };
+*/
+
+template <typename T>
+class NodeArgs {
+public:
+  void push(T *v) {
+    queue.push_back(v);
+  }
+
+  T *front() {
+    if (queue.empty())
+      return nullptr;
+    return queue.front();
+  }
+
+  T *back() {
+    if (queue.empty())
+      return nullptr;
+    return queue.back();
+  }
+
+  T *pop_front() {
+    if (queue.empty())
+      return nullptr;
+    T *v = queue.front();
+    queue.pop_front();
+    return v;
+  }
+
+  T *pop_back() {
+    if (queue.empty())
+      return nullptr;
+    T *v = queue.back();
+    queue.pop_back();
+    return v;
+  }
+
+  void clear() {
+    queue.clear();
+  }
+
+private:
+  std::list<T*> queue;
+};
 
 class Node {
 public:
   virtual ~Node() = default;
 
-  bool init(const rokid::Uri& uri, NodeError* err = nullptr, uint32_t argc = 0,
-      void** args = nullptr);
+  void set_read_buffers(NodeArgs<Buffer> *bufs);
 
-  bool write(Buffer& in, NodeError* err = nullptr, uint32_t argc = 0,
-      void** args = nullptr);
+  void set_write_buffers(NodeArgs<Buffer> *bufs);
 
-  bool read(Buffer& out, NodeError* err = nullptr, uint32_t argc = 0,
-      void** out_args = nullptr);
+  inline void set_read_buffer(Buffer *buf) { read_buffer = buf; }
+
+  inline void set_write_buffer(Buffer *buf) { write_buffer = buf; }
+
+  bool init(const rokid::Uri& uri, NodeArgs<void> *args = nullptr);
+
+  bool write(Buffer *in, NodeArgs<void> *args = nullptr);
+
+  bool read(Buffer *out, NodeArgs<void> *args = nullptr);
 
   void close();
 
   void chain(Node* node);
 
+  inline const NodeError *get_error() const { return &err_info; }
+
   virtual const char* name() const = 0;
 
 protected:
-  virtual bool on_init(const rokid::Uri& uri, NodeError* err, void* arg) = 0;
+  virtual bool on_init(const rokid::Uri& uri, void *arg) = 0;
 
-  virtual int32_t on_write(Buffer& in, Buffer& out, NodeError* err,
-      void* arg) = 0;
+  virtual int32_t on_write(Buffer *in, Buffer *out, void* arg) = 0;
 
   // return: 0  read success and complete
   //         1  read data not complete
   //         -1 read failed or data invalid
-  virtual int32_t on_read(Buffer& out, NodeError* err, void** out_arg) = 0;
+  virtual int32_t on_read(Buffer *out, Buffer *in, void *arg) = 0;
 
   virtual void on_close() = 0;
 
+  void clear_node_error();
+
 protected:
   Node* super_node = nullptr;
-  Buffer* read_buffer = nullptr;
-
-private:
-  std::mutex write_mutex;
+  Buffer *read_buffer = nullptr;
+  Buffer *write_buffer = nullptr;
+  static thread_local NodeError err_info;
 };
 
 } // namespace lizard

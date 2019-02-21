@@ -27,6 +27,7 @@ int32_t lizard_ws_frame_create(uint16_t op, uint8_t fin, uint8_t mask,
     return WSFRAME_ERROR_INVALID_PARAM;
   if (mask && mask_key == nullptr)
     return WSFRAME_ERROR_INVALID_PARAM;
+  bool has_mask = mask && payload_len;
   int16_t header_len;
   int16_t plen_type;
   if (payload_len < 126) {
@@ -39,7 +40,7 @@ int32_t lizard_ws_frame_create(uint16_t op, uint8_t fin, uint8_t mask,
     header_len = 10;
     plen_type = 2;
   }
-  if (mask)
+  if (has_mask)
     header_len += 4;
   if (out_size < header_len)
     return header_len;
@@ -47,12 +48,12 @@ int32_t lizard_ws_frame_create(uint16_t op, uint8_t fin, uint8_t mask,
   p[0] = (fin ? 0x80 : 0) | op;
   switch (plen_type) {
     case 0:
-      p[1] = (mask ? 0x80 : 0) | (int32_t)payload_len;
+      p[1] = (has_mask ? 0x80 : 0) | (int32_t)payload_len;
       p += 2;
       break;
     case 1: {
       uint16_t s;
-      p[1] = (mask ? 0x80 : 0) | 126;
+      p[1] = (has_mask ? 0x80 : 0) | 126;
       s = htons(payload_len);
       memcpy(p + 2, &s, sizeof(s));
       p += 4;
@@ -60,14 +61,14 @@ int32_t lizard_ws_frame_create(uint16_t op, uint8_t fin, uint8_t mask,
     }
     case 2: {
       uint64_t ll;
-      p[1] = (mask ? 0x80 : 0) | 127;
+      p[1] = (has_mask ? 0x80 : 0) | 127;
       ll = htobe64(payload_len);
       memcpy(p + 2, &ll, sizeof(ll));
       p += 10;
       break;
     }
   }
-  if (mask) {
+  if (has_mask) {
     memcpy(p, mask_key, 4);
   }
   return header_len;
@@ -84,6 +85,8 @@ void lizard_ws_frame_mask_payload(const char* mask_key, const void* in, uint32_t
 }
 
 int32_t lizard_ws_frame_parse_header(uint8_t* data, uint32_t size, WSFrameHeader* result) {
+  if (size == 0)
+    return 0;
   uint32_t hsz;
   uint8_t opcode = data[0] & 0xf;
   if (!check_opcode(opcode)) {

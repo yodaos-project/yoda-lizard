@@ -1,6 +1,7 @@
 #include <sys/mman.h>
 #include <chrono>
 #include "node.h"
+#include "common.h"
 #ifdef __APPLE__
 #include <sys/socket.h>
 #else
@@ -13,6 +14,8 @@ using namespace std;
 
 namespace rokid {
 namespace lizard {
+
+thread_local NodeError Node::err_info;
 
 // ==================Buffer====================
 void Buffer::set_data(void* p, uint32_t size, uint32_t b, uint32_t e) {
@@ -68,6 +71,7 @@ bool Buffer::append(const void* data, uint32_t size) {
   return true;
 }
 
+/**
 MmapBuffer::MmapBuffer(uint32_t size) {
   if (size < MIN_BUFSIZE)
     size = MIN_BUFSIZE;
@@ -83,42 +87,48 @@ MmapBuffer::~MmapBuffer() {
     munmap(datap, capacity);
   }
 }
+*/
 
 // ==================Node====================
-bool Node::init(const Uri& uri, NodeError* err, uint32_t argc, void** args) {
-  void* targ = argc ? *args : nullptr;
-  uint32_t sargc = argc ? argc - 1 : 0;
-  void** sargs = argc ? args + 1 : nullptr;
-  if (super_node && !super_node->init(uri, err, sargc, sargs)) {
+void Node::set_read_buffers(NodeArgs<Buffer> *bufs) {
+  if (bufs == nullptr)
+    return;
+  read_buffer = bufs->pop_front();
+  if (super_node)
+    super_node->set_read_buffers(bufs);
+}
+
+void Node::set_write_buffers(NodeArgs<Buffer> *bufs) {
+  if (bufs == nullptr)
+    return;
+  write_buffer = bufs->pop_front();
+  if (super_node)
+    super_node->set_write_buffers(bufs);
+}
+
+bool Node::init(const Uri& uri, NodeArgs<void> *args) {
+  void* targ = args ? args->pop_front() : nullptr;
+  if (super_node && !super_node->init(uri, args)) {
     return false;
   }
-  if (!on_init(uri, err, targ)) {
-    if (err) {
-      err->node = this;
-    }
+  if (!on_init(uri, targ)) {
     return false;
   }
+  clear_node_error();
   return true;
 }
 
-bool Node::write(Buffer& in, NodeError* err, uint32_t argc, void** args) {
-  Buffer result;
+bool Node::write(Buffer *in, NodeArgs<void> *args) {
   int32_t r;
-  void* targ = argc ? *args : nullptr;
-  uint32_t sargc = argc ? argc - 1 : 0;
-  void** sargs = argc ? args + 1 : nullptr;
-  lock_guard<mutex> locker(write_mutex);
+  void* targ = args ? args->pop_front() : nullptr;
 
   while (true) {
-    r = on_write(in, result, err, targ);
+    r = on_write(in, write_buffer, targ);
     if (r < 0) {
-      if (err) {
-        err->node = this;
-      }
       return false;
     }
     if (super_node) {
-      if (!super_node->write(result, err, sargc, sargs)) {
+      if (!super_node->write(write_buffer, args)) {
         return false;
       }
     }
@@ -126,45 +136,33 @@ bool Node::write(Buffer& in, NodeError* err, uint32_t argc, void** args) {
       break;
     }
   }
+  clear_node_error();
   return true;
 }
 
-bool Node::read(Buffer& out, NodeError* err, uint32_t argc,
-    void** out_args) {
+bool Node::read(Buffer *out, NodeArgs<void> *args) {
   int32_t r;
-  void** targ = argc ? out_args : nullptr;
-  uint32_t sargc = argc ? argc - 1 : 0;
-  void** sargs = argc ? out_args + 1 : nullptr;
+  void* targ = args ? args->pop_front() : nullptr;
 
   while (true) {
-    r = on_read(out, err, targ);
+    r = on_read(out, read_buffer, targ);
     if (r < 0) {
-      if (err) {
-        err->node = this;
-        return false;
-      }
+      return false;
     }
     if (r && super_node) {
-      if (read_buffer == nullptr || read_buffer->total_space() == 0) {
-        if (err) {
-          err->node = this;
-          err->code = -1;
-          err->descript = "read buffer not initialize";
-        }
-        return false;
-      }
-      if (!super_node->read(*read_buffer, err, sargc, sargs)) {
+      if (!super_node->read(read_buffer, args)) {
         return false;
       }
     } else {
       break;
     }
   }
+  clear_node_error();
   return true;
 }
 
 void Node::close() {
-  lock_guard<mutex> locker(write_mutex);
+  clear_node_error();
   on_close();
   if (super_node) {
     super_node->close();
@@ -173,6 +171,12 @@ void Node::close() {
 
 void Node::chain(Node* node) {
   super_node = node;
+}
+
+void Node::clear_node_error() {
+  err_info.node = nullptr;
+  err_info.code = 0;
+  err_info.desc.clear();
 }
 
 void ignore_sigpipe(int socket) {
@@ -193,6 +197,16 @@ void ignore_sigpipe(int socket) {
   }
 #endif // __APPLE__
 }
+
+#ifdef LIZARD_DEBUG
+void print_hex_data(const uint8_t *data, uint32_t size) {
+  uint32_t i;
+  for (i = 0; i < size; ++i) {
+    printf("%x ", data[i]);
+  }
+  printf("\n");
+}
+#endif
 
 } // namespace lizard
 } // namespace rokid
