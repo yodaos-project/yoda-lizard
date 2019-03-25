@@ -1,3 +1,5 @@
+#ifdef HAS_SSL
+
 #include <errno.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -203,3 +205,5 @@ void SSLNode::on_close() {
 
 } // namespace lizard
 } // namespace rokid
+
+#endif // HAS_SSL

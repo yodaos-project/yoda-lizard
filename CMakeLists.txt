@@ -14,12 +14,20 @@ findPackage(mutils REQUIRED
   STATIC_LIBS misc
 )
 
-findPackage(mbedtls REQUIRED
+if (SSL_LINK STREQUAL "shared")
+  set(findPackageArgs "SHARED_LIBS;${SSL_LIB}")
+else()
+  set(findPackageArgs "STATIC_LIBS;${SSL_LIB}")
+endif()
+if (SSL_LIB STREQUAL "mbedtls")
+findPackage(ssl REQUIRED
   HINTS ${mbedtlsPrefix}
   HEADERS ssl.h
   INC_PATH_SUFFIX include/polarssl
-  SHARED_LIBS mbedtls
+  ${findPackageArgs}
 )
+set(lizardCXXFLAGS "-DHAS_SSL")
+endif()
 
 set(CMAKE_CXX_STANDARD 11)
 if (BUILD_DEBUG)
@@ -40,14 +48,15 @@ file(GLOB_RECURSE lizard_SOURCES
 add_library(lizard SHARED
 	${lizard_SOURCES}
 )
+target_compile_options(lizard PRIVATE ${lizardCXXFLAGS})
 target_include_directories(lizard PRIVATE
   include
 	${mutils_INCLUDE_DIRS}
-	${mbedtls_INCLUDE_DIRS}
+	${ssl_INCLUDE_DIRS}
 )
 target_link_libraries(lizard
 	${mutils_LIBRARIES}
-	${mbedtls_LIBRARIES}
+	${ssl_LIBRARIES}
 )
 
 # install include files.
@@ -76,11 +85,14 @@ add_executable(websocket demo/examples/websocket.cpp)
 target_include_directories(websocket PRIVATE
   include
   ${mutils_INCLUDE_DIRS}
-  ${mbedtls_INCLUDE_DIRS}
+  ${ssl_INCLUDE_DIRS}
 )
 target_link_libraries(websocket
   ${mutils_LIBRARIES}
-  ${mbedtls_LIBRARIES}
+  ${ssl_LIBRARIES}
   lizard
+)
+install(TARGETS simple-sock websocket
+  RUNTIME DESTINATION bin
 )
 endif(BUILD_DEMO)

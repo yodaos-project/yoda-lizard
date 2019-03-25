@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef HAS_SSL
+
 #include <mutex>
 #include "node.h"
 
@@ -43,3 +45,5 @@ private:
 
 } // namespace lizard
 } // namespace rokid
+
+#endif // HAS_SSL

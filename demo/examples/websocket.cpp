@@ -12,7 +12,9 @@ using namespace rokid::lizard;
 
 int main(int argc, char** argv) {
   SocketNode sock_node;
+#ifdef HAS_SSL
   SSLNode ssl_node;
+#endif
   WSNode cli;
   Uri uri;
   const NodeError *err;
@@ -25,10 +27,16 @@ int main(int argc, char** argv) {
     printf("parse server uri failed\n");
     return 1;
   }
-  if (uri.scheme == "wss")
+  if (uri.scheme == "wss") {
+#ifdef HAS_SSL
     cli.chain(&ssl_node);
-  else
+#else
+    printf("not support ssl\n");
+    return 1;
+#endif
+  } else {
     cli.chain(&sock_node);
+  }
   NodeArgs<Buffer> bufs;
   bufs.push(&rbuf);
   cli.set_read_buffers(&bufs);
@@ -101,11 +109,7 @@ int main(int argc, char** argv) {
   args.push(&timeout);
   if (!cli.read(&buf, &args)) {
     err = cli.get_error();
-    if (err->node == &ssl_node && err->code == SSLNode::SSL_READ_TIMEOUT) {
-      printf("ssl read timeout\n");
-    } else {
-      printf("%s\n", err->desc.c_str());
-    }
+    printf("%s\n", err->desc.c_str());
   }
 
   cli.close();
