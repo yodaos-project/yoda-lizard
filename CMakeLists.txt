@@ -58,6 +58,20 @@ target_link_libraries(lizard
 	${mutils_LIBRARIES}
 	${ssl_LIBRARIES}
 )
+add_library(lizard_static STATIC
+	${lizard_SOURCES}
+)
+set_target_properties(lizard_static PROPERTIES OUTPUT_NAME lizard)
+target_compile_options(lizard_static PRIVATE ${lizardCXXFLAGS})
+target_include_directories(lizard_static PRIVATE
+  include
+	${mutils_INCLUDE_DIRS}
+	${ssl_INCLUDE_DIRS}
+)
+target_link_libraries(lizard_static
+	${mutils_LIBRARIES}
+	${ssl_LIBRARIES}
+)
 
 # install include files.
 file(GLOB lizard_HEADERS
@@ -67,8 +81,9 @@ install(FILES ${lizard_HEADERS}
 	DESTINATION include/lizard
 	PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
 )
-install(TARGETS lizard
+install(TARGETS lizard lizard_static
 	LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
 )
 
 if (BUILD_DEMO)
