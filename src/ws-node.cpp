@@ -1,4 +1,4 @@
-#include <strings.h>
+#include <string.h>
 #include "ws-node.h"
 #include "ws-frame.h"
 #include "http.h"

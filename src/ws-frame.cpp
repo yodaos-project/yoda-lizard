@@ -6,9 +6,6 @@
 #include <libkern/OSByteOrder.h>
 #define htobe64(x) OSSwapHostToBigInt64(x)
 #define be64toh(x) OSSwapBigToHostInt64(x)
-#else
-#define htobe64(x) htonll(x)
-#define be64toh(x) ntohll(x)
 #endif
 
 int32_t check_opcode(uint8_t op) {
