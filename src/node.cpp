@@ -1,4 +1,6 @@
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <string.h>
 #include <chrono>
 #include "node.h"
