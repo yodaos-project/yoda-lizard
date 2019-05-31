@@ -180,6 +180,19 @@ void Node::clear_node_error() {
   err_info.desc.clear();
 }
 
+void set_rw_timeout(int socket, int32_t tm, bool rd) {
+  struct timeval tv;
+  if (tm > 0) {
+    tv.tv_sec = tm / 1000;
+    tv.tv_usec = (tm % 1000) * 1000;
+  } else {
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+  }
+  int opt = rd ? SO_RCVTIMEO : SO_SNDTIMEO;
+  setsockopt(socket, SOL_SOCKET, opt, &tv, sizeof(tv));
+}
+
 void ignore_sigpipe(int socket) {
 #ifdef __APPLE__
   int option_value = 1; /* Set NOSIGPIPE to ON */

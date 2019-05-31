@@ -26,13 +26,6 @@ void SocketNode::set_node_error_by_errno() {
   err_info.desc = strerror(errno);
 }
 
-static void set_read_timeout(int socket, uint32_t tm) {
-  struct timeval tv;
-  tv.tv_sec = tm / 1000;
-  tv.tv_usec = (tm % 1000) * 1000;
-  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-}
-
 SocketNode::~SocketNode() {
   on_close();
 }
@@ -78,6 +71,10 @@ int32_t SocketNode::on_write(Buffer *in, Buffer *out, void* arg) {
   }
   if (in == nullptr || in->empty())
     return 0;
+  if (arg)
+    set_rw_timeout(socket, reinterpret_cast<int32_t*>(arg)[0], false);
+  else
+    set_rw_timeout(socket, -1, false);
   ssize_t r = ::write(socket, in->data_begin(), in->size());
   if (r < 0) {
     set_node_error_by_errno();
@@ -104,9 +101,10 @@ int32_t SocketNode::on_read(Buffer *out, Buffer *in, void* arg) {
     set_node_error(INSUFF_BUFFER);
     return -1;
   }
-  if (arg) {
-    set_read_timeout(socket, reinterpret_cast<uint32_t*>(arg)[0]);
-  }
+  if (arg)
+    set_rw_timeout(socket, reinterpret_cast<int32_t*>(arg)[0], true);
+  else
+    set_rw_timeout(socket, -1, true);
   ssize_t r = ::read(socket, out->data_end(), out->remain_space());
   if (r < 0) {
     if (errno == EAGAIN) {

@@ -31,13 +31,6 @@ SSLNode::~SSLNode() {
   on_close();
 }
 
-static void set_read_timeout(int socket, uint32_t tm) {
-  struct timeval tv;
-  tv.tv_sec = tm / 1000;
-  tv.tv_usec = (tm % 1000) * 1000;
-  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-}
-
 static int my_net_recv(void* ctx, unsigned char* buf, size_t len) {
   int fd = *(int*)ctx;
   ssize_t ret = ::read(fd, buf, len);
@@ -134,6 +127,10 @@ int32_t SSLNode::on_write(Buffer *in, Buffer *out, void* arg) {
   uint32_t sz = in->size();
   uint8_t *db = reinterpret_cast<uint8_t *>(in->data_begin());
 #endif
+  if (arg)
+    set_rw_timeout(socket, reinterpret_cast<int32_t *>(arg)[0], false);
+  else
+    set_rw_timeout(socket, -1, false);
   while (true) {
     r = ssl_write(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)in->data_begin(), in->size());
     if (r >= 0) {
@@ -161,9 +158,10 @@ int32_t SSLNode::on_read(Buffer *out, Buffer *in, void* arg) {
     set_node_error(INSUFF_READ_BUFFER);
     return -1;
   }
-  if (arg) {
-    set_read_timeout(socket, reinterpret_cast<uint32_t *>(arg)[0]);
-  }
+  if (arg)
+    set_rw_timeout(socket, reinterpret_cast<int32_t *>(arg)[0], true);
+  else
+    set_rw_timeout(socket, -1, true);
 
   int ret;
   do {

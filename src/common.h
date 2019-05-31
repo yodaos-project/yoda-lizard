@@ -3,6 +3,8 @@
 namespace rokid {
 namespace lizard {
 
+void set_rw_timeout(int socket, int32_t tm, bool rd);
+
 #ifdef LIZARD_DEBUG
 #include <stdint.h>
 #include <stdio.h>
