@@ -15,7 +15,7 @@ findPackage(mutils REQUIRED
 )
 
 if (SSL_LINK STREQUAL "shared")
-  set(findPackageArgs "SHARED_LIBS;${SSL_LIB}")
+  set(findPackageArgs "VERSION_SHARED_LIBS;${SSL_LIB};VERSIONS;1.3.17")
 else()
   set(findPackageArgs "STATIC_LIBS;${SSL_LIB}")
 endif()
