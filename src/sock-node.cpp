@@ -32,6 +32,7 @@ SocketNode::~SocketNode() {
 
 bool SocketNode::on_init(const rokid::Uri& uri, void* arg) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  KLOGD(TAG, "lizard: new socket %d", fd);
   if (fd < 0) {
     set_node_error_by_errno();
     return false;
@@ -71,10 +72,11 @@ int32_t SocketNode::on_write(Buffer *in, Buffer *out, void* arg) {
   }
   if (in == nullptr || in->empty())
     return 0;
-  if (arg)
+  if (arg) {
     set_rw_timeout(socket, reinterpret_cast<int32_t*>(arg)[0], false);
-  else
+  } else {
     set_rw_timeout(socket, -1, false);
+  }
   ssize_t r = ::write(socket, in->data_begin(), in->size());
   if (r < 0) {
     set_node_error_by_errno();
@@ -85,8 +87,8 @@ int32_t SocketNode::on_write(Buffer *in, Buffer *out, void* arg) {
     return -1;
   }
 #ifdef LIZARD_DEBUG
-  printf("sock-node: write %d bytes: ", (int)r);
-  print_hex_data((uint8_t*)in->data_begin(), r);
+  // printf("sock-node: write %d bytes: ", (int)r);
+  // print_hex_data((uint8_t*)in->data_begin(), r);
 #endif
   in->clear();
   return 0;
@@ -101,10 +103,11 @@ int32_t SocketNode::on_read(Buffer *out, Buffer *in, void* arg) {
     set_node_error(INSUFF_BUFFER);
     return -1;
   }
-  if (arg)
+  if (arg) {
     set_rw_timeout(socket, reinterpret_cast<int32_t*>(arg)[0], true);
-  else
+  } else {
     set_rw_timeout(socket, -1, true);
+  }
   ssize_t r = ::read(socket, out->data_end(), out->remain_space());
   if (r < 0) {
     if (errno == EAGAIN) {
@@ -120,14 +123,15 @@ int32_t SocketNode::on_read(Buffer *out, Buffer *in, void* arg) {
   }
   out->obtain(r);
 #ifdef LIZARD_DEBUG
-  printf("sock-node: read %d bytes: ", (int)r);
-  print_hex_data((uint8_t*)out->data_begin(), out->size());
+  // printf("sock-node: read %d bytes: ", (int)r);
+  // print_hex_data((uint8_t*)out->data_begin(), out->size());
 #endif
   return 0;
 }
 
 void SocketNode::on_close() {
   if (socket >= 0) {
+    KLOGD(TAG, "lizard: close socket %d", socket);
     ::close(socket);
     socket = -1;
   }

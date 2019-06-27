@@ -127,10 +127,11 @@ int32_t SSLNode::on_write(Buffer *in, Buffer *out, void* arg) {
   uint32_t sz = in->size();
   uint8_t *db = reinterpret_cast<uint8_t *>(in->data_begin());
 #endif
-  if (arg)
+  if (arg) {
     set_rw_timeout(socket, reinterpret_cast<int32_t *>(arg)[0], false);
-  else
+  } else {
     set_rw_timeout(socket, -1, false);
+  }
   while (true) {
     r = ssl_write(&reinterpret_cast<mbedtlsData*>(ssl_data)->ssl, (unsigned char*)in->data_begin(), in->size());
     if (r >= 0) {
@@ -143,8 +144,8 @@ int32_t SSLNode::on_write(Buffer *in, Buffer *out, void* arg) {
     }
   }
 #ifdef LIZARD_DEBUG
-  printf("ssl-node: write %u bytes: ", sz);
-  print_hex_data(db, sz);
+  // printf("ssl-node: write %u bytes: ", sz);
+  // print_hex_data(db, sz);
 #endif
   return 0;
 }
@@ -158,10 +159,11 @@ int32_t SSLNode::on_read(Buffer *out, Buffer *in, void* arg) {
     set_node_error(INSUFF_READ_BUFFER);
     return -1;
   }
-  if (arg)
+  if (arg) {
     set_rw_timeout(socket, reinterpret_cast<int32_t *>(arg)[0], true);
-  else
+  } else {
     set_rw_timeout(socket, -1, true);
+  }
 
   int ret;
   do {
@@ -184,8 +186,8 @@ int32_t SSLNode::on_read(Buffer *out, Buffer *in, void* arg) {
 
     out->obtain(ret);
 #ifdef LIZARD_DEBUG
-    printf("ssl-node: read %d bytes: ", ret);
-    print_hex_data(reinterpret_cast<uint8_t *>(out->data_begin()), out->size());
+    // printf("ssl-node: read %d bytes: ", ret);
+    // print_hex_data(reinterpret_cast<uint8_t *>(out->data_begin()), out->size());
 #endif
     break;
   } while(true);

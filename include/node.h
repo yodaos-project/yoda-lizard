@@ -1,6 +1,6 @@
 #pragma once
 
-#include <list>
+#include <vector>
 #include <string>
 #include "uri.h"
 
@@ -68,44 +68,37 @@ public:
 template <typename T>
 class NodeArgs {
 public:
-  void push(T *v) {
+  NodeArgs() {
+    queue.reserve(4);
+  }
+
+  void add(T *v) {
     queue.push_back(v);
   }
 
-  T *front() {
-    if (queue.empty())
+  T* get(uint32_t* idx = nullptr) {
+    if (idx)
+      *idx = queue_index;
+    if (queue.size() <= queue_index)
       return nullptr;
-    return queue.front();
-  }
-
-  T *back() {
-    if (queue.empty())
-      return nullptr;
-    return queue.back();
-  }
-
-  T *pop_front() {
-    if (queue.empty())
-      return nullptr;
-    T *v = queue.front();
-    queue.pop_front();
+    T *v = queue[queue_index];
+    ++queue_index;
     return v;
   }
 
-  T *pop_back() {
-    if (queue.empty())
-      return nullptr;
-    T *v = queue.back();
-    queue.pop_back();
-    return v;
+  void restore(uint32_t idx) {
+    if (idx < queue.size())
+      queue_index = idx;
   }
 
   void clear() {
     queue.clear();
+    queue_index = 0;
   }
 
 private:
-  std::list<T*> queue;
+  std::vector<T*> queue;
+  uint32_t queue_index{0};
 };
 
 class Node {

@@ -9,9 +9,10 @@ option(BUILD_DEMO "build demo and test programs" OFF)
 
 findPackage(mutils REQUIRED
   HINTS ${mutilsPrefix}
-  HEADERS uri.h
-  INC_PATH_SUFFIX include/misc
+  HEADERS uri.h rlog.h
+  INC_PATH_SUFFIX include/misc include/log
   STATIC_LIBS misc
+  SHARED_LIBS rlog
 )
 
 if (SSL_LINK STREQUAL "shared")
@@ -31,7 +32,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 11)
 if (BUILD_DEBUG)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DLIZARD_DEBUG")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DLIZARD_DEBUG -DROKID_LOG_ENABLED=1")
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
   set(CMAKE_SHARED_LINKER_FLAGS "-s")

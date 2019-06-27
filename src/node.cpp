@@ -96,7 +96,7 @@ MmapBuffer::~MmapBuffer() {
 void Node::set_read_buffers(NodeArgs<Buffer> *bufs) {
   if (bufs == nullptr)
     return;
-  read_buffer = bufs->pop_front();
+  read_buffer = bufs->get();
   if (super_node)
     super_node->set_read_buffers(bufs);
 }
@@ -104,13 +104,13 @@ void Node::set_read_buffers(NodeArgs<Buffer> *bufs) {
 void Node::set_write_buffers(NodeArgs<Buffer> *bufs) {
   if (bufs == nullptr)
     return;
-  write_buffer = bufs->pop_front();
+  write_buffer = bufs->get();
   if (super_node)
     super_node->set_write_buffers(bufs);
 }
 
 bool Node::init(const Uri& uri, NodeArgs<void> *args) {
-  void* targ = args ? args->pop_front() : nullptr;
+  void* targ = args ? args->get() : nullptr;
   if (super_node && !super_node->init(uri, args)) {
     return false;
   }
@@ -122,46 +122,62 @@ bool Node::init(const Uri& uri, NodeArgs<void> *args) {
 }
 
 bool Node::write(Buffer *in, NodeArgs<void> *args) {
-  int32_t r;
-  void* targ = args ? args->pop_front() : nullptr;
+  uint32_t argsIndex{0};
+  void* targ = args ? args->get(&argsIndex) : nullptr;
+  bool ret{true};
 
   while (true) {
-    r = on_write(in, write_buffer, targ);
+    auto r = on_write(in, write_buffer, targ);
     if (r < 0) {
-      return false;
+      ret = false;
+      goto exit;
     }
     if (super_node) {
       if (!super_node->write(write_buffer, args)) {
-        return false;
+        ret = false;
+        goto exit;
       }
     }
     if (r == 0) {
       break;
     }
   }
-  clear_node_error();
-  return true;
+
+exit:
+  if (args)
+    args->restore(argsIndex);
+  if (ret)
+    clear_node_error();
+  return ret;
 }
 
 bool Node::read(Buffer *out, NodeArgs<void> *args) {
-  int32_t r;
-  void* targ = args ? args->pop_front() : nullptr;
+  uint32_t argsIndex{0};
+  void* targ = args ? args->get(&argsIndex) : nullptr;
+  bool ret{true};
 
   while (true) {
-    r = on_read(out, read_buffer, targ);
+    auto r = on_read(out, read_buffer, targ);
     if (r < 0) {
-      return false;
+      ret = false;
+      goto exit;
     }
     if (r && super_node) {
       if (!super_node->read(read_buffer, args)) {
-        return false;
+        ret = false;
+        goto exit;
       }
     } else {
       break;
     }
   }
-  clear_node_error();
-  return true;
+
+exit:
+  if (args)
+    args->restore(argsIndex);
+  if (ret)
+    clear_node_error();
+  return ret;
 }
 
 void Node::close() {

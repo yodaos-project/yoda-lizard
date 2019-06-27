@@ -26,7 +26,7 @@ WSNode::~WSNode() {
 bool WSNode::send_frame(const void* payload, uint32_t size, uint32_t flags) {
   Buffer in;
   NodeArgs<void> args;
-  args.push(&flags);
+  args.add(&flags);
   in.set_data(const_cast<void *>(payload), size, 0, size);
   return Node::write(&in, &args);
 }
