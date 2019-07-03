@@ -75,8 +75,8 @@ public:
       entropy_free(&entropy);
       return false;
     }
+    x509_crt_init(&cacert);
     if (ca_list) {
-      x509_crt_init(&cacert);
       if (x509_crt_parse(&cacert, (const unsigned char*)ca_list,
             strlen(ca_list)) < 0) {
         x509_crt_free(&cacert);
