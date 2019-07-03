@@ -48,17 +48,19 @@ public:
   entropy_context entropy;
   ctr_drbg_context ctr_drbg;
   ssl_context ssl;
+  x509_crt cacert;
   bool initialized = false;
 
   ~mbedtlsData() {
     if (initialized) {
+      x509_crt_free(&cacert);
       ssl_free(&ssl);
       ctr_drbg_free(&ctr_drbg);
       entropy_free(&entropy);
     }
   }
 
-  bool init() {
+  bool init(const std::string& host, const char* ca_list) {
     static const char* pers = "lizard_ssl_node";
 
     memset(&ssl, 0, sizeof(ssl_context));
@@ -73,6 +75,18 @@ public:
       entropy_free(&entropy);
       return false;
     }
+    if (ca_list) {
+      x509_crt_init(&cacert);
+      if (x509_crt_parse(&cacert, (const unsigned char*)ca_list,
+            strlen(ca_list)) < 0) {
+        x509_crt_free(&cacert);
+        ctr_drbg_free(&ctr_drbg);
+        entropy_free(&entropy);
+        return false;
+      }
+      ssl_set_authmode(&ssl, SSL_VERIFY_REQUIRED);
+      ssl_set_ca_chain(&ssl, &cacert, nullptr, host.c_str());
+    }
     ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
     ssl_set_rng(&ssl, ctr_drbg_random, &ctr_drbg);
     initialized = true;
@@ -81,8 +95,9 @@ public:
 };
 
 bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
+  char* ca_list = (char*)arg;
   mbedtlsData *mbedtls_data = new mbedtlsData();
-  if (!mbedtls_data->init()) {
+  if (!mbedtls_data->init(uri.host, ca_list)) {
     delete mbedtls_data;
     set_node_error(SSL_INIT_FAILED);
     return false;
@@ -100,6 +115,7 @@ bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
     // if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
     //   continue;
     if (r < 0) {
+      KLOGD(TAG, "ssl handshake failed: -0x%x", -r);
       set_node_error(SSL_HANDSHAKE_FAILED);
       net_close(socket);
       socket = -1;
