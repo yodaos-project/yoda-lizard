@@ -154,7 +154,8 @@ int32_t SSLNode::on_write(Buffer *in, Buffer *out, void* arg) {
       in->consume(r);
       if (in->empty())
         break;
-    } else if (r != POLARSSL_ERR_NET_WANT_READ && r != POLARSSL_ERR_NET_WANT_WRITE) {
+    } else {
+      KLOGI(TAG, "ssl write failed: -0x%x", -r);
       set_node_error(SSL_WRITE_FAILED);
       return -1;
     }
