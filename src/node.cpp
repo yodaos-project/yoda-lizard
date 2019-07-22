@@ -186,6 +186,10 @@ void Node::close() {
   if (super_node) {
     super_node->close();
   }
+  if (read_buffer)
+    read_buffer->clear();
+  if (write_buffer)
+    write_buffer->clear();
 }
 
 void Node::chain(Node* node) {
