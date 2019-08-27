@@ -38,10 +38,10 @@ int main(int argc, char** argv) {
     cli.chain(&sock_node);
   }
   NodeArgs<Buffer> bufs;
-  bufs.push(&rbuf);
+  bufs.add(&rbuf);
   cli.set_read_buffers(&bufs);
   bufs.clear();
-  bufs.push(&wbuf);
+  bufs.add(&wbuf);
   cli.set_write_buffers(&bufs);
   if (!cli.init(uri)) {
     err = cli.get_error();
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     printf("ping failed\n");
     return 1;
   }
-  args.push(&wsflags);
+  args.add(&wsflags);
   if (!cli.read(&buf, &args)) {
     cli.close();
     printf("read pong failed\n");
@@ -105,8 +105,8 @@ int main(int argc, char** argv) {
 
   // test timeout
   uint32_t timeout = 1;
-  args.push(nullptr);
-  args.push(&timeout);
+  args.add(nullptr);
+  args.add(&timeout);
   if (!cli.read(&buf, &args)) {
     err = cli.get_error();
     printf("%s\n", err->desc.c_str());

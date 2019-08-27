@@ -95,13 +95,15 @@ public:
 };
 
 bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
-  char* ca_list = (char*)arg;
+  intptr_t* sslargs = (intptr_t*)arg;
+  char* ca_list = (char*)sslargs[0];
   mbedtlsData *mbedtls_data = new mbedtlsData();
   if (!mbedtls_data->init(uri.host, ca_list)) {
     delete mbedtls_data;
     set_node_error(SSL_INIT_FAILED);
     return false;
   }
+  set_rw_timeout(socket, sslargs[1], true);
   if (net_connect(&socket, uri.host.c_str(), uri.port)) {
     delete mbedtls_data;
     set_node_error(SSL_INIT_FAILED);
