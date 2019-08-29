@@ -103,21 +103,24 @@ bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
     set_node_error(SSL_INIT_FAILED);
     return false;
   }
-  set_rw_timeout(socket, sslargs[1], true);
-  if (net_connect(&socket, uri.host.c_str(), uri.port)) {
+  KLOGD(TAG, "net_connect %s:%d", uri.host.c_str(), uri.port);
+  int r;
+  if (r = net_connect(&socket, uri.host.c_str(), uri.port)) {
+    KLOGI(TAG, "net_connect failed: -0x%x", -r);
     delete mbedtls_data;
     set_node_error(SSL_INIT_FAILED);
     return false;
   }
+  KLOGD(TAG, "set socket write timeout %d", (int32_t)sslargs[1]);
 
-  int r;
+  set_rw_timeout(socket, sslargs[1], true);
   ssl_set_bio(&mbedtls_data->ssl, my_net_recv, &socket, net_send, &socket);
   do {
     r = ssl_handshake(&mbedtls_data->ssl);
     // if (r == POLARSSL_ERR_NET_WANT_WRITE || r == POLARSSL_ERR_NET_WANT_READ)
     //   continue;
     if (r < 0) {
-      KLOGD(TAG, "ssl handshake failed: -0x%x", -r);
+      KLOGI(TAG, "ssl handshake failed: -0x%x", -r);
       set_node_error(SSL_HANDSHAKE_FAILED);
       net_close(socket);
       socket = -1;
@@ -126,6 +129,7 @@ bool SSLNode::on_init(const rokid::Uri& uri, void* arg) {
     }
     break;
   } while (true);
+  KLOGD(TAG, "ssl handshake success");
   ignore_sigpipe(socket);
   ssl_data = mbedtls_data;
   return true;

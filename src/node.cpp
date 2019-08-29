@@ -2,9 +2,11 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
+#include <errno.h>
 #include <chrono>
 #include "node.h"
 #include "common.h"
+#include "rlog.h"
 #ifdef __APPLE__
 #include <sys/socket.h>
 #else
@@ -212,7 +214,9 @@ void set_rw_timeout(int socket, int32_t tm, bool rd) {
     tv.tv_usec = 0;
   }
   int opt = rd ? SO_RCVTIMEO : SO_SNDTIMEO;
-  setsockopt(socket, SOL_SOCKET, opt, &tv, sizeof(tv));
+  if (setsockopt(socket, SOL_SOCKET, opt, &tv, sizeof(tv)) < 0) {
+    KLOGW(TAG, "set_rw_timeout failed: %s", strerror(errno));
+  }
 }
 
 void ignore_sigpipe(int socket) {
